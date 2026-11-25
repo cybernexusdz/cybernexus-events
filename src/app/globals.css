@@ -1,0 +1,146 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+
+    /* CyberNexus Cyan (Default - boyDark official tokens) */
+    --bg-primary: #051b2e;
+    --bg-surface: #0b253e;
+    --accent: #3be0fe;
+    --accent-rgb: 59, 224, 254;
+    --glow-color: rgba(59, 224, 254, 0.35);
+    --grid-color: rgba(59, 224, 254, 0.05);
+
+    /* shadcn/ui dark tokens mapping to Cyber Cyan */
+    --background: 213 70% 8%;
+    --foreground: 180 100% 98%;
+
+    --card: 212 64% 12%;
+    --card-foreground: 180 100% 98%;
+
+    --popover: 212 64% 12%;
+    --popover-foreground: 180 100% 98%;
+
+    --primary: 187 92% 53%;
+    --primary-foreground: 213 70% 8%;
+
+    --secondary: 212 50% 18%;
+    --secondary-foreground: 180 100% 98%;
+
+    --muted: 212 50% 16%;
+    --muted-foreground: 210 20% 65%;
+
+    --accent: 187 92% 53%;
+    --accent-foreground: 213 70% 8%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 212 40% 22%;
+    --input: 212 40% 22%;
+    --ring: 187 92% 53%;
+
+    --radius: 0.75rem;
+  }
+
+  [data-theme="purple"] {
+    color-scheme: dark;
+
+    /* CyberNexus Purple (Alternate - girlDark official tokens) */
+    --bg-primary: #1a031e;
+    --bg-surface: #2d0b35;
+    --accent: #e776f7;
+    --accent-rgb: 231, 118, 247;
+    --glow-color: rgba(231, 118, 247, 0.35);
+    --grid-color: rgba(231, 118, 247, 0.05);
+
+    /* shadcn/ui dark tokens mapping to Cyber Purple */
+    --background: 286 60% 6%;
+    --foreground: 290 100% 98%;
+
+    --card: 282 58% 10%;
+    --card-foreground: 290 100% 98%;
+
+    --popover: 282 58% 10%;
+    --popover-foreground: 290 100% 98%;
+
+    --primary: 292 84% 73%;
+    --primary-foreground: 286 60% 6%;
+
+    --secondary: 282 40% 16%;
+    --secondary-foreground: 290 100% 98%;
+
+    --muted: 282 40% 16%;
+    --muted-foreground: 280 20% 65%;
+
+    --accent: 292 84% 73%;
+    --accent-foreground: 286 60% 6%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 282 35% 22%;
+    --input: 282 35% 22%;
+    --ring: 292 84% 73%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: hsl(var(--foreground));
+    font-feature-settings: "rlig" 1, "calt" 1;
+    min-height: 100vh;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+}
+
+/* Faint Cyber Grid Pattern */
+.cyber-grid {
+  background-image: 
+    linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+/* Neon Glow Accents */
+.cyber-glow {
+  box-shadow: 0 0 16px -2px var(--glow-color);
+}
+
+.cyber-glow-lg {
+  box-shadow: 0 0 28px -3px var(--glow-color);
+}
+
+.cyber-border {
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
+}
+
+.cyber-border:hover {
+  border-color: rgba(var(--accent-rgb), 0.45);
+}
+
+/* Custom scrollbars for a futuristic touch */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-surface);
+  border-radius: 4px;
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--accent-rgb), 0.3);
+}
