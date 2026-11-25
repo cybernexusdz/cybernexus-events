@@ -59,11 +59,22 @@ export async function GET(request: NextRequest) {
         endAt: true,
         maxCapacity: true,
         status: true,
+        speakerName: true,
+        speakerRole: true,
+        prerequisites: true,
+        slidesUrl: true,
+        repoUrl: true,
+        videoUrl: true,
         organizer: {
           select: {
             id: true,
             name: true,
             image: true,
+          },
+        },
+        feedbacks: {
+          select: {
+            rating: true,
           },
         },
         registrations: {
@@ -74,7 +85,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Format events with registration and waitlist counts
+    // Format events with registration, waitlist counts, and feedback metrics
     const formattedEvents = events.map((event) => {
       const confirmedCount = event.registrations.filter(
         (r) => r.status === "REGISTERED" || r.status === "CHECKED_IN"
@@ -83,14 +94,20 @@ export async function GET(request: NextRequest) {
         (r) => r.status === "WAITLIST"
       ).length;
 
-      // Exclude full registrations list from payload
-      const { registrations, ...rest } = event;
+      const totalReviews = event.feedbacks.length;
+      const ratingSum = event.feedbacks.reduce((sum, f) => sum + f.rating, 0);
+      const averageRating = totalReviews > 0 ? Number((ratingSum / totalReviews).toFixed(1)) : 0;
+
+      // Exclude raw registrations & feedbacks lists from payload
+      const { registrations, feedbacks, ...rest } = event;
       return {
         ...rest,
         registeredCount: confirmedCount,
         waitlistCount,
         spotsLeft: Math.max(0, event.maxCapacity - confirmedCount),
         isFull: confirmedCount >= event.maxCapacity,
+        averageRating,
+        totalReviews,
       };
     });
 
@@ -156,6 +173,12 @@ export async function POST(request: NextRequest) {
         endAt: new Date(data.endAt),
         maxCapacity: data.maxCapacity,
         status: data.status,
+        speakerName: data.speakerName || null,
+        speakerRole: data.speakerRole || null,
+        prerequisites: data.prerequisites || null,
+        slidesUrl: data.slidesUrl || null,
+        repoUrl: data.repoUrl || null,
+        videoUrl: data.videoUrl || null,
         organizerId: session.user.id,
       },
     });

@@ -23,6 +23,13 @@ import {
   CheckCircle2,
   Sparkles,
   Terminal,
+  FileText,
+  Github,
+  Video,
+  Star,
+  Archive,
+  Clock,
+  Layers,
 } from "lucide-react";
 
 interface EventItem {
@@ -40,6 +47,13 @@ interface EventItem {
   waitlistCount: number;
   spotsLeft: number;
   isFull: boolean;
+  speakerName?: string | null;
+  speakerRole?: string | null;
+  slidesUrl?: string | null;
+  repoUrl?: string | null;
+  videoUrl?: string | null;
+  averageRating?: number;
+  totalReviews?: number;
   userRegistration?: {
     id: string;
     status: string;
@@ -63,6 +77,7 @@ export function EventsExplorer() {
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
   const [selectedCategory, setSelectedCategory] = React.useState("ALL");
+  const [viewTab, setViewTab] = React.useState<"upcoming" | "past">("upcoming");
 
   // Registration state
   const [registeringEventId, setRegisteringEventId] = React.useState<string | null>(null);
@@ -207,8 +222,58 @@ export function EventsExplorer() {
     }
   };
 
+  const now = new Date().getTime();
+  const upcomingEvents = events.filter(
+    (e) => e.status !== "COMPLETED" && new Date(e.endAt).getTime() >= now
+  );
+  const pastEvents = events.filter(
+    (e) => e.status === "COMPLETED" || new Date(e.endAt).getTime() < now
+  );
+  const displayedEvents = viewTab === "upcoming" ? upcomingEvents : pastEvents;
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* View Switcher: Upcoming vs. Past Workshops & Resources */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setViewTab("upcoming")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+              viewTab === "upcoming"
+                ? "bg-primary text-primary-foreground shadow-[0_0_15px_var(--glow-color)] font-bold"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            }`}
+          >
+            <Ticket className="h-4 w-4" />
+            <span>Upcoming Workshops</span>
+            <span className="font-mono text-xs rounded-full px-2 py-0.5 bg-black/20">
+              {upcomingEvents.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setViewTab("past")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+              viewTab === "past"
+                ? "bg-primary text-primary-foreground shadow-[0_0_15px_var(--glow-color)] font-bold"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            }`}
+          >
+            <Archive className="h-4 w-4" />
+            <span>Past Workshops & Resources</span>
+            <span className="font-mono text-xs rounded-full px-2 py-0.5 bg-black/20">
+              {pastEvents.length}
+            </span>
+          </button>
+        </div>
+
+        <span className="text-xs font-mono text-muted-foreground hidden sm:block">
+          {viewTab === "upcoming" ? "Open seat registrations" : "Slides, code & session recordings"}
+        </span>
+      </div>
+
       {/* Search & Filter Toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
         <div className="relative flex-1 max-w-md">
@@ -265,18 +330,29 @@ export function EventsExplorer() {
             <Card key={n} className="h-80 animate-pulse bg-card/40 border-border/50" />
           ))}
         </div>
-      ) : events.length === 0 ? (
+      ) : displayedEvents.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border/80 p-12 text-center space-y-3 bg-card/30">
-          <AlertCircle className="h-10 w-10 text-muted-foreground mx-auto opacity-60" />
-          <h3 className="font-semibold text-lg text-foreground">No Workshops Found</h3>
+          {viewTab === "past" ? (
+            <Archive className="h-10 w-10 text-muted-foreground mx-auto opacity-60" />
+          ) : (
+            <AlertCircle className="h-10 w-10 text-muted-foreground mx-auto opacity-60" />
+          )}
+          <h3 className="font-semibold text-lg text-foreground">
+            {viewTab === "past" ? "No Past Workshops Found" : "No Upcoming Workshops Found"}
+          </h3>
           <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-            No events match your current filter criteria. Check back soon or select another category.
+            {viewTab === "past"
+              ? "No past workshop resources match your filter. Check back after upcoming workshops conclude for published slides, code, and recordings."
+              : "No upcoming workshops match your current filter. Check back soon or browse our past workshops archive."}
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {events.map((event) => {
-            const capacityRatio = event.maxCapacity > 0 ? (event.registeredCount / event.maxCapacity) * 100 : 0;
+          {displayedEvents.map((event) => {
+            const isPastEvent =
+              event.status === "COMPLETED" || new Date(event.endAt).getTime() < now;
+            const capacityRatio =
+              event.maxCapacity > 0 ? (event.registeredCount / event.maxCapacity) * 100 : 0;
             const startDate = new Date(event.startAt).toLocaleString("en-US", {
               month: "short",
               day: "numeric",
@@ -302,13 +378,23 @@ export function EventsExplorer() {
                       alt={event.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-card via-black/20 to-transparent" />
-                    <Badge
-                      variant="neon"
-                      className="absolute top-3 left-3 text-[10px] uppercase font-mono backdrop-blur-md"
-                    >
-                      {event.category}
-                    </Badge>
+                    <div className="absolute inset-0 bg-gradient-to-t from-card via-black/30 to-transparent" />
+                    <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
+                      <Badge
+                        variant="neon"
+                        className="text-[10px] uppercase font-mono backdrop-blur-md"
+                      >
+                        {event.category}
+                      </Badge>
+                      {isPastEvent && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] uppercase font-mono bg-black/60 backdrop-blur-md border-border/80 text-muted-foreground"
+                        >
+                          ARCHIVED
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   // Sleek Built-in CyberNexus Dark Geometric Gradient Banner
@@ -323,7 +409,11 @@ export function EventsExplorer() {
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-[11px] font-mono relative z-10">
-                      {event.isFull ? (
+                      {isPastEvent ? (
+                        <span className="text-muted-foreground flex items-center gap-1 font-medium">
+                          <Archive className="h-3.5 w-3.5" /> Completed &amp; Archived
+                        </span>
+                      ) : event.isFull ? (
                         <span className="text-amber-400 font-semibold flex items-center gap-1">
                           <Flame className="h-3.5 w-3.5" /> Full (Waitlist Open)
                         </span>
@@ -332,33 +422,60 @@ export function EventsExplorer() {
                           {event.spotsLeft} seats remaining
                         </span>
                       )}
+
+                      {event.averageRating && event.averageRating > 0 ? (
+                        <span className="text-amber-400 font-semibold flex items-center gap-1">
+                          <Star className="h-3 w-3 fill-amber-400" />
+                          {event.averageRating.toFixed(1)}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 )}
 
                 <CardHeader className="pt-4 pb-2">
-                  {event.posterUrl && (
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="text-xs font-mono text-muted-foreground">
-                        {startDate}
-                      </span>
-                      {event.isFull ? (
-                        <span className="text-xs font-mono text-amber-400 flex items-center gap-1">
-                          <Flame className="h-3 w-3" /> Full
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {startDate}
+                    </span>
+                    {isPastEvent ? (
+                      event.averageRating && event.averageRating > 0 ? (
+                        <span className="flex items-center gap-1 text-[11px] font-mono font-semibold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/20">
+                          <Star className="h-3 w-3 fill-amber-400" />
+                          {event.averageRating.toFixed(1)} ({event.totalReviews || 0})
                         </span>
                       ) : (
-                        <span className="text-xs font-mono text-emerald-400">
-                          {event.spotsLeft} seats left
+                        <span className="text-xs font-mono text-muted-foreground">
+                          Archived
                         </span>
-                      )}
-                    </div>
-                  )}
+                      )
+                    ) : event.isFull ? (
+                      <span className="text-xs font-mono text-amber-400 flex items-center gap-1">
+                        <Flame className="h-3 w-3" /> Full
+                      </span>
+                    ) : (
+                      <span className="text-xs font-mono text-emerald-400">
+                        {event.spotsLeft} seats left
+                      </span>
+                    )}
+                  </div>
 
                   <CardTitle className="text-lg font-bold line-clamp-2 leading-snug group-hover:text-primary transition-colors">
                     <Link href={`/events/${event.id}`}>
                       {event.title}
                     </Link>
                   </CardTitle>
+
+                  {event.speakerName && (
+                    <div className="flex items-center gap-1.5 text-xs text-foreground/80 pt-1 font-medium">
+                      <Sparkles className="h-3 w-3 text-primary shrink-0" />
+                      <span className="truncate">
+                        {event.speakerName}
+                        {event.speakerRole ? ` • ${event.speakerRole}` : ""}
+                      </span>
+                    </div>
+                  )}
+
                   <CardDescription className="line-clamp-2 text-xs pt-1">
                     {event.description}
                   </CardDescription>
@@ -373,66 +490,133 @@ export function EventsExplorer() {
                     <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
                     <span className="truncate">{event.location}</span>
                   </div>
+
                   <div className="flex items-center justify-between gap-2 pt-1 text-[11px]">
                     <div className="flex items-center gap-1.5">
                       <Users className="h-3.5 w-3.5 text-primary" />
                       <span>
-                        {event.registeredCount} / {event.maxCapacity} Registered
+                        {isPastEvent
+                          ? `${event.registeredCount} Attendees Hosted`
+                          : `${event.registeredCount} / ${event.maxCapacity} Registered`}
                       </span>
                     </div>
-                    {event.waitlistCount > 0 && (
+                    {!isPastEvent && event.waitlistCount > 0 && (
                       <span className="font-mono text-amber-400">
                         +{event.waitlistCount} waitlist
                       </span>
                     )}
                   </div>
 
-                  {/* Seat Capacity Bar */}
-                  <div className="w-full bg-secondary/50 rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        event.isFull ? "bg-amber-400" : "bg-primary"
-                      }`}
-                      style={{ width: `${Math.min(100, capacityRatio)}%` }}
-                    />
-                  </div>
+                  {!isPastEvent && (
+                    /* Seat Capacity Bar */
+                    <div className="w-full bg-secondary/50 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          event.isFull ? "bg-amber-400" : "bg-primary"
+                        }`}
+                        style={{ width: `${Math.min(100, capacityRatio)}%` }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Resource Link Pills for Past / Equipped Sessions */}
+                  {(event.slidesUrl || event.repoUrl || event.videoUrl) && (
+                    <div className="pt-2 flex flex-wrap items-center gap-1.5 border-t border-border/40">
+                      <span className="text-[10px] font-mono text-muted-foreground mr-1">
+                        Resources:
+                      </span>
+                      {event.slidesUrl && (
+                        <a
+                          href={event.slidesUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition-colors"
+                          title="View Slides"
+                        >
+                          <FileText className="h-3 w-3" />
+                          Slides
+                        </a>
+                      )}
+                      {event.repoUrl && (
+                        <a
+                          href={event.repoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500/20 transition-colors"
+                          title="View GitHub Repository"
+                        >
+                          <Github className="h-3 w-3" />
+                          Code
+                        </a>
+                      )}
+                      {event.videoUrl && (
+                        <a
+                          href={event.videoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 transition-colors"
+                          title="Watch Recording"
+                        >
+                          <Video className="h-3 w-3" />
+                          Recording
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
 
                 {/* Direct Action Button on each card */}
                 <CardFooter className="pt-2 flex gap-2">
-                  <Button asChild variant="outline" size="sm" className="px-2.5 text-xs">
-                    <Link href={`/events/${event.id}`} title="View event details">
-                      Details
-                    </Link>
-                  </Button>
-
-                  {isRegistered ? (
-                    <Button asChild variant="cyber" size="sm" className="flex-1 gap-1.5 font-semibold text-xs">
-                      <Link href="/my-tickets">
-                        <Ticket className="h-3.5 w-3.5 text-primary" />
-                        <span>
-                          {registrationStatus === "WAITLIST" ? "On Waitlist (#Pass)" : "View My Ticket"}
-                        </span>
+                  {isPastEvent ? (
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-2 border-primary/40 hover:bg-primary/10 hover:text-primary font-semibold text-xs"
+                    >
+                      <Link href={`/events/${event.id}`}>
+                        <Archive className="h-3.5 w-3.5" />
+                        <span>View Archive &amp; Resources</span>
+                        <ArrowRight className="h-3.5 w-3.5 ml-auto opacity-70" />
                       </Link>
                     </Button>
                   ) : (
-                    <Button
-                      onClick={() => handleRegister(event.id)}
-                      disabled={isSubmittingThis}
-                      size="sm"
-                      className={`flex-1 gap-1.5 font-bold text-xs ${
-                        event.isFull ? "bg-amber-500 hover:bg-amber-600 text-black" : "cyber-glow"
-                      }`}
-                    >
-                      <Ticket className="h-3.5 w-3.5" />
-                      <span>
-                        {isSubmittingThis
-                          ? "Securing spot..."
-                          : event.isFull
-                          ? "Join Waitlist (Free)"
-                          : "Register Now (1-Click)"}
-                      </span>
-                    </Button>
+                    <>
+                      <Button asChild variant="outline" size="sm" className="px-2.5 text-xs">
+                        <Link href={`/events/${event.id}`} title="View event details">
+                          Details
+                        </Link>
+                      </Button>
+
+                      {isRegistered ? (
+                        <Button asChild variant="cyber" size="sm" className="flex-1 gap-1.5 font-semibold text-xs">
+                          <Link href="/my-tickets">
+                            <Ticket className="h-3.5 w-3.5 text-primary" />
+                            <span>
+                              {registrationStatus === "WAITLIST" ? "On Waitlist (#Pass)" : "View My Ticket"}
+                            </span>
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={() => handleRegister(event.id)}
+                          disabled={isSubmittingThis}
+                          size="sm"
+                          className={`flex-1 gap-1.5 font-bold text-xs ${
+                            event.isFull ? "bg-amber-500 hover:bg-amber-600 text-black" : "cyber-glow"
+                          }`}
+                        >
+                          <Ticket className="h-3.5 w-3.5" />
+                          <span>
+                            {isSubmittingThis
+                              ? "Securing spot..."
+                              : event.isFull
+                              ? "Join Waitlist (Free)"
+                              : "Register Now (1-Click)"}
+                          </span>
+                        </Button>
+                      )}
+                    </>
                   )}
                 </CardFooter>
               </Card>

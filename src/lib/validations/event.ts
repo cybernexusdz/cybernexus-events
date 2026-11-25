@@ -35,6 +35,12 @@ export const eventFormSchema = z
       .int("Capacity must be an integer")
       .min(1, "Capacity must be at least 1 seat"),
     status: z.enum(["DRAFT", "PUBLISHED", "COMPLETED", "CANCELLED"]).default("PUBLISHED"),
+    speakerName: z.string().trim().max(100).optional().or(z.literal("")).nullable(),
+    speakerRole: z.string().trim().max(100).optional().or(z.literal("")).nullable(),
+    prerequisites: z.string().trim().max(2000).optional().or(z.literal("")).nullable(),
+    slidesUrl: z.string().trim().url("Must be a valid URL").optional().or(z.literal("")).nullable(),
+    repoUrl: z.string().trim().url("Must be a valid URL").optional().or(z.literal("")).nullable(),
+    videoUrl: z.string().trim().url("Must be a valid URL").optional().or(z.literal("")).nullable(),
   })
   .refine((data) => data.endAt > data.startAt, {
     message: "End time must be after start time",
@@ -58,6 +64,12 @@ export const eventUpdateSchema = z
     endAt: z.coerce.date().optional(),
     maxCapacity: z.coerce.number().int().min(1, "Capacity must be at least 1 seat").optional(),
     status: z.enum(["DRAFT", "PUBLISHED", "COMPLETED", "CANCELLED"]).optional(),
+    speakerName: z.string().trim().max(100).optional().or(z.literal("")).nullable(),
+    speakerRole: z.string().trim().max(100).optional().or(z.literal("")).nullable(),
+    prerequisites: z.string().trim().max(2000).optional().or(z.literal("")).nullable(),
+    slidesUrl: z.string().trim().url("Must be a valid URL").optional().or(z.literal("")).nullable(),
+    repoUrl: z.string().trim().url("Must be a valid URL").optional().or(z.literal("")).nullable(),
+    videoUrl: z.string().trim().url("Must be a valid URL").optional().or(z.literal("")).nullable(),
   })
   .refine(
     (data) => {

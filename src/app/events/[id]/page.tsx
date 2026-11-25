@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ProfileModal } from "@/components/profile-modal";
+import { EventFeedback } from "@/components/event-feedback";
 import {
   Calendar,
   MapPin,
@@ -20,6 +21,12 @@ import {
   AlertTriangle,
   Flame,
   ShieldCheck,
+  User,
+  FileText,
+  Github,
+  Video,
+  ExternalLink,
+  BookOpen,
 } from "lucide-react";
 
 interface EventDetail {
@@ -37,6 +44,15 @@ interface EventDetail {
   waitlistCount: number;
   spotsLeft: number;
   isFull: boolean;
+  speakerName?: string | null;
+  speakerRole?: string | null;
+  prerequisites?: string | null;
+  slidesUrl?: string | null;
+  repoUrl?: string | null;
+  videoUrl?: string | null;
+  averageRating?: number;
+  totalReviews?: number;
+  feedbacks?: any[];
   organizer: {
     id: string;
     name: string | null;
@@ -277,6 +293,100 @@ export default function EventDetailPage() {
             </p>
           </div>
 
+          {/* Speaker / Instructor Profile */}
+          {event.speakerName && (
+            <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-center gap-3.5">
+              <div className="h-11 w-11 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-primary shrink-0">
+                <User className="h-5 w-5" />
+              </div>
+              <div className="space-y-0.5">
+                <span className="font-mono text-[10px] uppercase text-primary font-bold tracking-wider">
+                  Featured Speaker / Instructor
+                </span>
+                <h4 className="text-sm font-bold text-foreground">
+                  {event.speakerName}
+                </h4>
+                {event.speakerRole && (
+                  <p className="text-xs text-muted-foreground">
+                    {event.speakerRole}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Prerequisites & Requirements */}
+          {event.prerequisites && (
+            <div className="rounded-xl border border-border/70 bg-secondary/20 p-4 space-y-2">
+              <h4 className="font-mono text-xs uppercase font-bold text-foreground tracking-wider flex items-center gap-2">
+                <BookOpen className="h-4 w-4 text-primary" />
+                <span>Prerequisites & Preparation</span>
+              </h4>
+              <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line">
+                {event.prerequisites}
+              </p>
+            </div>
+          )}
+
+          {/* Post-Workshop Resources (Slides, GitHub Repo, Recording) */}
+          {(event.slidesUrl || event.repoUrl || event.videoUrl) && (
+            <div className="rounded-xl border border-border/70 bg-card/90 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-mono text-xs uppercase font-bold text-foreground tracking-wider flex items-center gap-2">
+                  <ExternalLink className="h-4 w-4 text-primary" />
+                  <span>Workshop Resources & Materials</span>
+                </h4>
+                <Badge variant="cyber" className="text-[10px] font-mono">
+                  OPEN ACCESS
+                </Badge>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                {event.slidesUrl && (
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 text-xs border-primary/40 hover:bg-primary/10"
+                  >
+                    <a href={event.slidesUrl} target="_blank" rel="noopener noreferrer">
+                      <FileText className="h-3.5 w-3.5 text-primary" />
+                      <span>Download Slides</span>
+                    </a>
+                  </Button>
+                )}
+
+                {event.repoUrl && (
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 text-xs border-border hover:bg-muted"
+                  >
+                    <a href={event.repoUrl} target="_blank" rel="noopener noreferrer">
+                      <Github className="h-3.5 w-3.5 text-foreground" />
+                      <span>View GitHub Repo</span>
+                    </a>
+                  </Button>
+                )}
+
+                {event.videoUrl && (
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 text-xs border-destructive/40 hover:bg-destructive/10"
+                  >
+                    <a href={event.videoUrl} target="_blank" rel="noopener noreferrer">
+                      <Video className="h-3.5 w-3.5 text-rose-400" />
+                      <span>Watch Recording</span>
+                    </a>
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Capacity Progress */}
           <div className="space-y-2 rounded-xl border border-border/60 bg-secondary/15 p-4">
             <div className="flex items-center justify-between text-xs">
@@ -373,6 +483,15 @@ export default function EventDetailPage() {
               </Button>
             )}
           </div>
+
+          {/* Student Feedback & Ratings */}
+          <EventFeedback
+            eventId={id}
+            canSubmitFeedback={userStatus === "CHECKED_IN"}
+            initialFeedbacks={event.feedbacks}
+            initialAverage={event.averageRating}
+            initialTotal={event.totalReviews}
+          />
         </CardContent>
       </Card>
 

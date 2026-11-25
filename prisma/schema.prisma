@@ -46,6 +46,7 @@ model User {
   events        Event[]         @relation("OrganizerEvents")
   registrations Registration[]
   notifications Notification[]
+  feedbacks     Feedback[]
 }
 
 model Account {
@@ -98,14 +99,35 @@ model Event {
   posterUrl   String?
   startAt     DateTime
   endAt       DateTime
-  maxCapacity Int
-  status      EventStatus   @default(DRAFT)
-  organizerId String
-  organizer   User          @relation("OrganizerEvents", fields: [organizerId], references: [id], onDelete: Cascade)
+  maxCapacity   Int
+  status        EventStatus   @default(DRAFT)
+  organizerId   String
+  organizer     User          @relation("OrganizerEvents", fields: [organizerId], references: [id], onDelete: Cascade)
+
+  speakerName   String?
+  speakerRole   String?
+  prerequisites String?       @db.Text
+  slidesUrl     String?
+  repoUrl       String?
+  videoUrl      String?
 
   registrations Registration[]
+  feedbacks     Feedback[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  rating    Int
+  comment   String?  @db.Text
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
 }
 
 model Registration {

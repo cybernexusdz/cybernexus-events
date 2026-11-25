@@ -36,6 +36,21 @@ export async function GET(
             ticketToken: true,
           },
         },
+        feedbacks: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                image: true,
+                role: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
       },
     });
 
@@ -58,10 +73,17 @@ export async function GET(
       ? event.registrations.find((r) => r.userId === session.user.id) || null
       : null;
 
-    const { registrations, ...rest } = event;
+    const totalReviews = event.feedbacks.length;
+    const ratingSum = event.feedbacks.reduce((sum, f) => sum + f.rating, 0);
+    const averageRating = totalReviews > 0 ? Number((ratingSum / totalReviews).toFixed(1)) : 0;
+
+    const { registrations, feedbacks, ...rest } = event;
 
     return NextResponse.json({
       ...rest,
+      feedbacks,
+      averageRating,
+      totalReviews,
       registeredCount: confirmedCount,
       waitlistCount,
       spotsLeft: Math.max(0, event.maxCapacity - confirmedCount),
@@ -153,6 +175,12 @@ export async function PATCH(
     if (data.endAt !== undefined) updatePayload.endAt = new Date(data.endAt);
     if (data.maxCapacity !== undefined) updatePayload.maxCapacity = data.maxCapacity;
     if (data.status !== undefined) updatePayload.status = data.status;
+    if (data.speakerName !== undefined) updatePayload.speakerName = data.speakerName || null;
+    if (data.speakerRole !== undefined) updatePayload.speakerRole = data.speakerRole || null;
+    if (data.prerequisites !== undefined) updatePayload.prerequisites = data.prerequisites || null;
+    if (data.slidesUrl !== undefined) updatePayload.slidesUrl = data.slidesUrl || null;
+    if (data.repoUrl !== undefined) updatePayload.repoUrl = data.repoUrl || null;
+    if (data.videoUrl !== undefined) updatePayload.videoUrl = data.videoUrl || null;
 
     const updatedEvent = await prisma.event.update({
       where: { id },

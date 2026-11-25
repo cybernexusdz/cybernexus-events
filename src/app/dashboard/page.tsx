@@ -70,6 +70,14 @@ interface DashboardEvent {
   registeredCount: number;
   waitlistCount: number;
   spotsLeft: number;
+  speakerName?: string | null;
+  speakerRole?: string | null;
+  prerequisites?: string | null;
+  slidesUrl?: string | null;
+  repoUrl?: string | null;
+  videoUrl?: string | null;
+  averageRating?: number;
+  totalReviews?: number;
 }
 
 interface AttendeeRecord {
@@ -124,6 +132,12 @@ export default function DashboardPage() {
     endAt: "",
     maxCapacity: 50,
     status: "PUBLISHED" as const,
+    speakerName: "",
+    speakerRole: "",
+    prerequisites: "",
+    slidesUrl: "",
+    repoUrl: "",
+    videoUrl: "",
   });
   const [formSubmitting, setFormSubmitting] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
@@ -173,6 +187,12 @@ export default function DashboardPage() {
       endAt: defaultEnd.toISOString().slice(0, 16),
       maxCapacity: 60,
       status: "PUBLISHED",
+      speakerName: "",
+      speakerRole: "",
+      prerequisites: "",
+      slidesUrl: "",
+      repoUrl: "",
+      videoUrl: "",
     });
     setFormError(null);
     setFieldErrors({});
@@ -192,6 +212,12 @@ export default function DashboardPage() {
       endAt: new Date(evt.endAt).toISOString().slice(0, 16),
       maxCapacity: evt.maxCapacity,
       status: evt.status as any,
+      speakerName: evt.speakerName || "",
+      speakerRole: evt.speakerRole || "",
+      prerequisites: evt.prerequisites || "",
+      slidesUrl: evt.slidesUrl || "",
+      repoUrl: evt.repoUrl || "",
+      videoUrl: evt.videoUrl || "",
     });
     setFormError(null);
     setFieldErrors({});
@@ -880,6 +906,96 @@ export default function DashboardPage() {
                 {fieldErrors.posterUrl && (
                   <p className="text-[11px] text-destructive font-medium">{fieldErrors.posterUrl[0]}</p>
                 )}
+              </div>
+
+              {/* Speaker / Instructor Section */}
+              <div className="rounded-xl border border-border/70 bg-muted/20 p-3.5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-primary" />
+                  <span className="text-xs font-semibold text-foreground">Speaker & Instructor (Optional)</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground">Speaker Name</label>
+                    <Input
+                      placeholder="e.g. Sarah Mansouri"
+                      value={formData.speakerName}
+                      onChange={(e) => setFormData({ ...formData, speakerName: e.target.value })}
+                      className="text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground">Speaker Role / Bio</label>
+                    <Input
+                      placeholder="e.g. Lead Backend Dev @ CyberNexus"
+                      value={formData.speakerRole}
+                      onChange={(e) => setFormData({ ...formData, speakerRole: e.target.value })}
+                      className="text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Prerequisites Section */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                  <span>Prerequisites & What to Bring (Optional)</span>
+                  <span className="text-[10px] text-muted-foreground font-normal">
+                    Tools, software, or accounts students need
+                  </span>
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. - Laptop with Node.js 20+ installed&#10;- GitHub account&#10;- Basic JavaScript / React knowledge"
+                  value={formData.prerequisites}
+                  onChange={(e) => setFormData({ ...formData, prerequisites: e.target.value })}
+                  className="w-full rounded-lg border border-input bg-card/60 p-2.5 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
+                />
+              </div>
+
+              {/* Post-Workshop Resources Section */}
+              <div className="rounded-xl border border-border/70 bg-muted/20 p-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ExternalLink className="h-4 w-4 text-primary" />
+                    <span className="text-xs font-semibold text-foreground">Post-Workshop Resources (Optional)</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    Slides, Repo & Video
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground">Slides URL</label>
+                    <Input
+                      type="url"
+                      placeholder="https://speakerdeck.com/... or Google Slides link"
+                      value={formData.slidesUrl}
+                      onChange={(e) => setFormData({ ...formData, slidesUrl: e.target.value })}
+                      className="text-xs font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground">GitHub Repo URL</label>
+                    <Input
+                      type="url"
+                      placeholder="https://github.com/cybernexusdz/..."
+                      value={formData.repoUrl}
+                      onChange={(e) => setFormData({ ...formData, repoUrl: e.target.value })}
+                      className="text-xs font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground">Recording / Video URL</label>
+                    <Input
+                      type="url"
+                      placeholder="https://youtube.com/watch?v=..."
+                      value={formData.videoUrl}
+                      onChange={(e) => setFormData({ ...formData, videoUrl: e.target.value })}
+                      className="text-xs font-mono"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* 7. Publication Status */}
