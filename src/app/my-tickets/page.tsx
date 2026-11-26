@@ -7,6 +7,15 @@ import { toPng } from "html-to-image";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { QRCodeDisplay } from "@/components/qr-code-display";
 import { ProfileModal } from "@/components/profile-modal";
 import { UserAvatar } from "@/components/user-avatar";
@@ -62,6 +71,40 @@ export default function MyTicketsPage() {
     studentId?: string | null;
   } | null>(null);
   const ticketRefs = React.useRef<{ [key: string]: HTMLDivElement | null }>({});
+
+  // Latin Name Certificate Confirmation Modal State
+  const [latinNameModalOpen, setLatinNameModalOpen] = React.useState(false);
+  const [targetCertRegId, setTargetCertRegId] = React.useState<string | null>(null);
+  const [latinNameInput, setLatinNameInput] = React.useState("");
+
+  const hasNonLatinChars = (str?: string | null) => {
+    if (!str) return false;
+    return /[^\u0020-\u007E\u00A0-\u00FF]/.test(str);
+  };
+
+  const handleDownloadCertificate = (regId: string) => {
+    const currentName = session?.user?.name || "";
+    if (hasNonLatinChars(currentName)) {
+      setTargetCertRegId(regId);
+      // Pre-fill with ASCII characters or email prefix
+      const stripped = currentName.replace(/[^\x20-\x7E]/g, "").trim();
+      const fallback = session?.user?.email ? session.user.email.split("@")[0] : "";
+      setLatinNameInput(stripped || fallback);
+      setLatinNameModalOpen(true);
+    } else {
+      window.open(`/api/certificates/${regId}`, "_blank");
+    }
+  };
+
+  const handleConfirmLatinDownload = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetCertRegId) return;
+    const safe = latinNameInput.trim();
+    const url = `/api/certificates/${targetCertRegId}${safe ? `?displayName=${encodeURIComponent(safe)}` : ""}`;
+    window.open(url, "_blank");
+    setLatinNameModalOpen(false);
+    setTargetCertRegId(null);
+  };
 
   const fetchProfile = React.useCallback(async () => {
     try {
@@ -396,19 +439,13 @@ export default function MyTicketsPage() {
                     {/* Button 3: Download Certificate (PDF) */}
                     {isCheckedIn ? (
                       <Button
-                        asChild
                         variant="cyber"
                         size="sm"
+                        onClick={() => handleDownloadCertificate(reg.id)}
                         className="text-xs gap-1.5 cyber-glow"
                       >
-                        <a
-                          href={`/api/certificates/${reg.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <Award className="h-3.5 w-3.5 text-accent" />
-                          <span>Download Certificate (PDF)</span>
-                        </a>
+                        <Award className="h-3.5 w-3.5 text-accent" />
+                        <span>Download Certificate (PDF)</span>
                       </Button>
                     ) : (
                       <Button
@@ -454,6 +491,61 @@ export default function MyTicketsPage() {
         description="Keep your level and specialty up to date as you progress through your university curriculum."
         submitButtonText="Save Academic Profile"
       />
+
+      {/* Confirm Latin Name Dialog for Certificate (WinAnsi Safe) */}
+      <Dialog open={latinNameModalOpen} onOpenChange={setLatinNameModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Award className="h-5 w-5 text-accent" />
+              <span>Confirm Certificate Name</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
+              Official certificates use international Latin typography (French/English) for LinkedIn &amp; CV verification. Please confirm how your name should appear:
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleConfirmLatinDownload} className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-mono font-medium text-foreground">
+                Your Name in Latin Characters (A-Z)
+              </label>
+              <Input
+                placeholder="e.g. Mohammed Benali"
+                value={latinNameInput}
+                onChange={(e) => setLatinNameInput(e.target.value)}
+                required
+                className="bg-background/80 font-medium text-sm"
+                autoFocus
+              />
+              <span className="text-[11px] text-muted-foreground block">
+                This exact name will be engraved onto your verified PDF certificate.
+              </span>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setLatinNameModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="cyber"
+                size="sm"
+                className="gap-1.5 cyber-glow"
+                disabled={!latinNameInput.trim()}
+              >
+                <Download className="h-4 w-4" />
+                <span>Download Verified PDF</span>
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

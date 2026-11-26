@@ -38,6 +38,11 @@ import {
   AlertCircle,
   GraduationCap,
   FileSpreadsheet,
+  Star,
+  Search,
+  UserCheck,
+  UserCog,
+  Check,
 } from "lucide-react";
 import { UserAvatar } from "@/components/user-avatar";
 import { BrandLogo } from "@/components/brand-logo";
@@ -109,6 +114,22 @@ interface AttendeeRecord {
   } | null;
 }
 
+interface AdminUserRecord {
+  id: string;
+  name: string | null;
+  email: string | null;
+  image?: string | null;
+  studentId?: string | null;
+  level?: string | null;
+  specialty?: string | null;
+  role: "STUDENT" | "ORGANIZER" | "ADMIN";
+  createdAt: string;
+  _count: {
+    registrations: number;
+    events: number;
+  };
+}
+
 export default function DashboardPage() {
   const { data: session } = useSession();
   const role = session?.user?.role || "ORGANIZER";
@@ -118,6 +139,12 @@ export default function DashboardPage() {
   const [attendees, setAttendees] = React.useState<AttendeeRecord[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [selectedEventId, setSelectedEventId] = React.useState<string>("ALL");
+
+  // Admin Team & Roles state
+  const [adminUsers, setAdminUsers] = React.useState<AdminUserRecord[]>([]);
+  const [adminLoading, setAdminLoading] = React.useState(false);
+  const [adminSearch, setAdminSearch] = React.useState("");
+  const [updatingUserId, setUpdatingUserId] = React.useState<string | null>(null);
 
   // Create / Edit Event Dialog State
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
@@ -169,6 +196,64 @@ export default function DashboardPage() {
   React.useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
+
+  // Fetch users for Admin Team & Roles tab
+  const fetchAdminUsers = React.useCallback(async (query: string = "") => {
+    if (session?.user?.role !== "ADMIN") return;
+    try {
+      setAdminLoading(true);
+      const params = new URLSearchParams();
+      if (query.trim()) params.set("q", query.trim());
+      const res = await fetch(`/api/admin/users?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAdminUsers(data);
+      }
+    } catch (err) {
+      console.error("Failed to load admin users:", err);
+    } finally {
+      setAdminLoading(false);
+    }
+  }, [session?.user?.role]);
+
+  React.useEffect(() => {
+    if (activeTab === "team" && session?.user?.role === "ADMIN") {
+      fetchAdminUsers(adminSearch);
+    }
+  }, [activeTab, adminSearch, session?.user?.role, fetchAdminUsers]);
+
+  const handleToggleRole = async (targetUser: AdminUserRecord) => {
+    if (targetUser.role === "ADMIN") return;
+    const newRole = targetUser.role === "ORGANIZER" ? "STUDENT" : "ORGANIZER";
+    const confirmMsg =
+      newRole === "ORGANIZER"
+        ? `Promote ${targetUser.name || targetUser.email} to ORGANIZER?\n\nThey will be able to create events, manage registrations, and scan door tickets.`
+        : `Demote ${targetUser.name || targetUser.email} to STUDENT?\n\nThey will lose access to the Organizer Dashboard.`;
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      setUpdatingUserId(targetUser.id);
+      const res = await fetch(`/api/admin/users/${targetUser.id}/role`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: newRole }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAdminUsers((prev) =>
+          prev.map((u) => (u.id === targetUser.id ? { ...u, role: newRole } : u))
+        );
+      } else {
+        alert(data.error || "Failed to update role.");
+      }
+    } catch (err) {
+      console.error("Error updating user role:", err);
+      alert("Network error updating role.");
+    } finally {
+      setUpdatingUserId(null);
+    }
+  };
 
   // Open modal for new event (empty posterUrl by default, WORKSHOPS by default)
   const handleOpenCreate = () => {
@@ -415,7 +500,11 @@ export default function DashboardPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full sm:w-auto grid-cols-3">
+        <TabsList
+          className={`grid w-full sm:w-auto ${
+            session?.user?.role === "ADMIN" ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"
+          }`}
+        >
           <TabsTrigger value="events" className="gap-2">
             <Calendar className="h-4 w-4" />
             <span>Manage Events ({events.length})</span>
@@ -428,6 +517,12 @@ export default function DashboardPage() {
             <Users className="h-4 w-4" />
             <span>Attendees ({attendees.length})</span>
           </TabsTrigger>
+          {session?.user?.role === "ADMIN" && (
+            <TabsTrigger value="team" className="gap-2">
+              <Shield className="h-4 w-4 text-amber-400" />
+              <span>Team &amp; Roles</span>
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Tab 1: Manage Events */}
@@ -469,7 +564,21 @@ export default function DashboardPage() {
                     {events.map((evt) => (
                       <TableRow key={evt.id}>
                         <TableCell>
-                          <div className="font-semibold text-foreground">{evt.title}</div>
+                          <div className="font-semibold text-foreground flex items-center gap-2">
+                            <span>{evt.title}</span>
+                            {evt.averageRating && evt.averageRating > 0 ? (
+                              <span
+                                className="inline-flex items-center gap-1 text-[11px] font-mono text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/20 font-semibold"
+                                title={`Average Rating: ${evt.averageRating.toFixed(1)} based on ${evt.totalReviews || 0} reviews`}
+                              >
+                                <Star className="h-3 w-3 fill-amber-400" />
+                                {evt.averageRating.toFixed(1)}
+                                <span className="text-[10px] text-muted-foreground font-normal">
+                                  ({evt.totalReviews || 0})
+                                </span>
+                              </span>
+                            ) : null}
+                          </div>
                           <div className="text-[11px] text-muted-foreground line-clamp-1">
                             {evt.description}
                           </div>
@@ -703,6 +812,164 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Tab 4: Team & Roles Management (ADMIN ONLY) */}
+        {session?.user?.role === "ADMIN" && (
+          <TabsContent value="team" className="space-y-4">
+            <Card className="border-border/70 bg-card/60">
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-lg">CyberNexus Team &amp; Roles</CardTitle>
+                    <Badge variant="neon" className="font-mono text-[10px]">
+                      ADMIN ACCESS
+                    </Badge>
+                  </div>
+                  <CardDescription>
+                    Promote active club members to Organizers to enable event creation and door scanning.
+                  </CardDescription>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="relative w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Search member or email..."
+                      value={adminSearch}
+                      onChange={(e) => setAdminSearch(e.target.value)}
+                      className="pl-9 h-8 text-xs bg-card"
+                    />
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchAdminUsers(adminSearch)}
+                    className="h-8 gap-1.5"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${adminLoading ? "animate-spin" : ""}`} />
+                    <span className="hidden sm:inline">Refresh</span>
+                  </Button>
+                </div>
+              </CardHeader>
+
+              <CardContent>
+                {adminLoading && adminUsers.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-muted-foreground">
+                    Loading club member directory...
+                  </div>
+                ) : adminUsers.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-muted-foreground">
+                    No users matching &quot;{adminSearch}&quot;.
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Member</TableHead>
+                        <TableHead>Academic Track</TableHead>
+                        <TableHead>Activity</TableHead>
+                        <TableHead>Current Role</TableHead>
+                        <TableHead className="text-right">Permission Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {adminUsers.map((u) => {
+                        const isSelf = u.id === session?.user?.id;
+                        const isTargetAdmin = u.role === "ADMIN";
+                        const isUpdating = updatingUserId === u.id;
+
+                        return (
+                          <TableRow key={u.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-2.5">
+                                <UserAvatar src={u.image} name={u.name} size={32} />
+                                <div>
+                                  <div className="font-semibold text-foreground flex items-center gap-1.5">
+                                    <span>{u.name || "Student Member"}</span>
+                                    {isSelf && (
+                                      <Badge variant="outline" className="text-[9px] px-1 py-0 border-primary/40 text-primary">
+                                        You
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">{u.email}</div>
+                                </div>
+                              </div>
+                            </TableCell>
+
+                            <TableCell>
+                              <div className="text-xs space-y-0.5">
+                                <div className="font-medium text-foreground">
+                                  {u.specialty || "—"}
+                                </div>
+                                <div className="text-[11px] font-mono text-muted-foreground">
+                                  {u.level ? `Level: ${u.level}` : "Level not set"}
+                                  {u.studentId ? ` • #${u.studentId}` : ""}
+                                </div>
+                              </div>
+                            </TableCell>
+
+                            <TableCell className="text-xs font-mono text-muted-foreground">
+                              <div>{u._count.registrations} passes</div>
+                              {u._count.events > 0 && (
+                                <div className="text-primary">{u._count.events} events created</div>
+                              )}
+                            </TableCell>
+
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  u.role === "ADMIN"
+                                    ? "neon"
+                                    : u.role === "ORGANIZER"
+                                    ? "cyber"
+                                    : "secondary"
+                                }
+                                className="font-mono text-[10px] uppercase font-bold"
+                              >
+                                {u.role}
+                              </Badge>
+                            </TableCell>
+
+                            <TableCell className="text-right">
+                              {isTargetAdmin ? (
+                                <span className="text-xs font-mono text-muted-foreground italic">
+                                  {isSelf ? "Lead Admin (Current)" : "Lead Admin"}
+                                </span>
+                              ) : u.role === "ORGANIZER" ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={isUpdating}
+                                  onClick={() => handleToggleRole(u)}
+                                  className="h-8 text-xs text-destructive border-destructive/40 hover:bg-destructive/10"
+                                >
+                                  {isUpdating ? "Updating..." : "Demote to Student"}
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="cyber"
+                                  size="sm"
+                                  disabled={isUpdating}
+                                  onClick={() => handleToggleRole(u)}
+                                  className="h-8 text-xs gap-1.5 font-semibold"
+                                >
+                                  <UserCheck className="h-3.5 w-3.5 text-primary" />
+                                  <span>{isUpdating ? "Promoting..." : "Promote to Organizer"}</span>
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Simplified Create / Edit Event Dialog focused on essentials */}

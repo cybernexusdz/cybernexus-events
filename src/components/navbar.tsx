@@ -7,6 +7,7 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificationBell } from "@/components/notification-bell";
 import {
   Calendar,
   Ticket,
@@ -123,6 +124,7 @@ export function Navbar() {
         {/* Right Section: Theme Toggle & User Auth */}
         <div className="hidden md:flex items-center gap-3">
           <ThemeToggle />
+          <NotificationBell />
 
           {status === "loading" ? (
             <div className="h-9 w-28 rounded-lg bg-muted/40 animate-pulse" />
@@ -226,6 +228,7 @@ export function Navbar() {
         {/* Mobile Menu Button */}
         <div className="flex md:hidden items-center gap-2">
           <ThemeToggle />
+          <NotificationBell />
           <Button
             variant="ghost"
             size="icon"
