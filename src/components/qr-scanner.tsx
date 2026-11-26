@@ -15,11 +15,8 @@ import {
   Upload,
   FileImage,
   KeyRound,
-  RefreshCw,
   Loader2,
   Check,
-  Smartphone,
-  Laptop,
 } from "lucide-react";
 
 interface ScanResult {
@@ -81,6 +78,7 @@ function getFriendlyCameraError(err: any): string {
 
 export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
   const [isScanning, setIsScanning] = React.useState(false);
+  const [isStarting, setIsStarting] = React.useState(false);
   const [cameraError, setCameraError] = React.useState<string | null>(null);
   const [cameraErrorName, setCameraErrorName] = React.useState<string | null>(null);
   const [lastScanResult, setLastScanResult] = React.useState<ScanResult | null>(null);
@@ -93,11 +91,14 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
   // Manual Token fallback state
   const [manualToken, setManualToken] = React.useState("");
 
+  // Lifecycle guards to prevent React 18 race conditions and unmount crashes
   const scannerRef = React.useRef<Html5Qrcode | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const isCooldownRef = React.useRef(false);
+  const isMountedRef = React.useRef(true);
+  const isTransitioningRef = React.useRef(false);
 
-  // Discover and list camera devices
+  // Enumerate camera devices
   const enumerateCameras = React.useCallback(async (): Promise<CameraOption[]> => {
     try {
       const devices = await Html5Qrcode.getCameras();
@@ -106,37 +107,64 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
           id: d.id,
           label: d.label || `Camera ${idx + 1}`,
         }));
-        setAvailableCameras(formatted);
+        if (isMountedRef.current) {
+          setAvailableCameras(formatted);
 
-        // Auto-select preferred camera: prefer rear/back/environment for mobile, else first device
-        const rear = formatted.find((c) =>
-          /(back|rear|environment|arri[eè]re)/i.test(c.label)
-        );
-        const preferredId = rear ? rear.id : formatted[0].id;
-        setSelectedCameraId((prev) => prev || preferredId);
+          // Auto-select preferred camera: prefer rear/back/environment for mobile, else first device
+          const rear = formatted.find((c) =>
+            /(back|rear|environment|arri[eè]re)/i.test(c.label)
+          );
+          const preferredId = rear ? rear.id : formatted[0].id;
+          setSelectedCameraId((prev) => prev || preferredId);
+        }
         return formatted;
       }
     } catch (err) {
-      console.warn("Camera enumeration error (permission may not be granted yet):", err);
+      console.warn("Camera enumeration note (permissions may not be granted yet):", err);
     }
     return [];
   }, []);
 
   React.useEffect(() => {
+    isMountedRef.current = true;
     enumerateCameras();
+
+    return () => {
+      isMountedRef.current = false;
+      // Strict unmount cleanup: stop active stream cleanly without calling synchronous clear() on an unmounting node
+      if (scannerRef.current) {
+        try {
+          if (scannerRef.current.isScanning) {
+            scannerRef.current.stop().catch(() => {});
+          }
+        } catch (_) {}
+        scannerRef.current = null;
+      }
+    };
   }, [enumerateCameras]);
 
-  // Clean stop for webcam
+  // Clean, transition-locked stop for webcam
   const stopScanning = React.useCallback(async () => {
+    if (isTransitioningRef.current) return;
+    isTransitioningRef.current = true;
+
     try {
-      if (scannerRef.current && scannerRef.current.isScanning) {
-        await scannerRef.current.stop();
-        scannerRef.current.clear();
+      if (scannerRef.current) {
+        if (scannerRef.current.isScanning) {
+          await scannerRef.current.stop();
+        }
+        try {
+          scannerRef.current.clear();
+        } catch (_) {}
       }
     } catch (err) {
       console.warn("Error stopping camera scanner:", err);
     } finally {
-      setIsScanning(false);
+      if (isMountedRef.current) {
+        setIsScanning(false);
+        setIsStarting(false);
+      }
+      isTransitioningRef.current = false;
     }
   }, []);
 
@@ -149,7 +177,7 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
       isCooldownRef.current = true;
       setIsProcessing(true);
 
-      // 2.5s cooldown to avoid multiple rapid re-scans of the same ticket
+      // 2.5s cooldown to prevent rapid repetitive re-scans of the same ticket
       setTimeout(() => {
         isCooldownRef.current = false;
       }, 2500);
@@ -162,6 +190,8 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
         });
 
         const data = await res.json();
+
+        if (!isMountedRef.current) return;
 
         if (res.status === 200) {
           setLastScanResult({
@@ -198,22 +228,30 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
         }
       } catch (err) {
         console.error("Check-in scan API error:", err);
-        setLastScanResult({
-          type: "error",
-          message: "Network error communicating with check-in verification service.",
-        });
+        if (isMountedRef.current) {
+          setLastScanResult({
+            type: "error",
+            message: "Network error communicating with check-in verification service.",
+          });
+        }
       } finally {
-        setIsProcessing(false);
+        if (isMountedRef.current) {
+          setIsProcessing(false);
+        }
       }
     },
     [isProcessing, onCheckInSuccess]
   );
 
-  // Start webcam with robust multi-camera selection and fallback
+  // Start webcam with robust multi-camera selection, fallback and concurrency guard
   const startScanning = async (overrideCameraId?: string) => {
+    if (isTransitioningRef.current) return;
+    isTransitioningRef.current = true;
+
     setCameraError(null);
     setCameraErrorName(null);
     setLastScanResult(null);
+    setIsStarting(true);
 
     try {
       // 1. Enumerate available cameras
@@ -226,6 +264,8 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
         setCameraError("No camera detected on this device.");
         setCameraErrorName("NotFoundError");
         setIsScanning(false);
+        setIsStarting(false);
+        isTransitioningRef.current = false;
         return;
       }
 
@@ -239,13 +279,18 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
         setSelectedCameraId(targetCameraId);
       }
 
-      // Ensure prior instance is cleaned
-      if (scannerRef.current && scannerRef.current.isScanning) {
-        await scannerRef.current.stop();
-        scannerRef.current.clear();
+      // Clean prior scanner instance if exists
+      if (scannerRef.current) {
+        try {
+          if (scannerRef.current.isScanning) {
+            await scannerRef.current.stop();
+          }
+          scannerRef.current.clear();
+        } catch (_) {}
       }
 
-      const html5QrCode = new Html5Qrcode("reader");
+      // Initialize Html5Qrcode on the isolated DOM element
+      const html5QrCode = new Html5Qrcode("cybernexus-qr-reader");
       scannerRef.current = html5QrCode;
 
       // 3. Attempt camera start
@@ -260,9 +305,7 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
           (decodedText) => {
             handleScanText(decodedText);
           },
-          () => {
-            // Frame parse ignore
-          }
+          () => {}
         );
       } catch (startErr: any) {
         console.warn("Primary camera start failed, retrying user-facing fallback:", startErr);
@@ -281,18 +324,28 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
         );
       }
 
-      setIsScanning(true);
+      if (isMountedRef.current) {
+        setIsScanning(true);
+      }
     } catch (err: any) {
       console.error("Camera startup error:", err);
-      const errName = err?.name || "CameraError";
-      setCameraErrorName(errName);
-      setCameraError(getFriendlyCameraError(err));
-      setIsScanning(false);
+      if (isMountedRef.current) {
+        const errName = err?.name || "CameraError";
+        setCameraErrorName(errName);
+        setCameraError(getFriendlyCameraError(err));
+        setIsScanning(false);
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsStarting(false);
+      }
+      isTransitioningRef.current = false;
     }
   };
 
   // Camera dropdown change handler
   const handleCameraChange = async (newId: string) => {
+    if (isTransitioningRef.current) return;
     setSelectedCameraId(newId);
     if (isScanning) {
       await stopScanning();
@@ -300,7 +353,7 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
     }
   };
 
-  // Fallback 1: Scan from QR Image File
+  // Fallback 1: Scan from QR Image File (Dedicated isolated container, showImage = false)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -309,31 +362,32 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
     setCameraErrorName(null);
     setIsProcessing(true);
 
+    let fileScanner: Html5Qrcode | null = null;
     try {
-      if (scannerRef.current && scannerRef.current.isScanning) {
-        await scannerRef.current.stop();
-        scannerRef.current.clear();
-        setIsScanning(false);
-      }
-
-      let instance = scannerRef.current;
-      if (!instance) {
-        instance = new Html5Qrcode("reader");
-        scannerRef.current = instance;
-      }
-
-      const decodedText = await instance.scanFile(file, true);
+      // Use the separate hidden container exclusively for image parsing
+      fileScanner = new Html5Qrcode("cybernexus-qr-file-reader");
+      // Passing showImage = false ensures html5-qrcode never injects preview nodes or mutates UI
+      const decodedText = await fileScanner.scanFile(file, false);
       if (decodedText) {
         await handleScanText(decodedText);
       }
     } catch (err: any) {
       console.error("QR image scan failure:", err);
-      setLastScanResult({
-        type: "error",
-        message: "NO QR CODE DETECTED: Could not decode a valid ticket QR pass in the selected image.",
-      });
+      if (isMountedRef.current) {
+        setLastScanResult({
+          type: "error",
+          message: "NO QR CODE DETECTED: Could not decode a valid ticket QR pass in the selected image.",
+        });
+      }
     } finally {
-      setIsProcessing(false);
+      if (fileScanner) {
+        try {
+          fileScanner.clear();
+        } catch (_) {}
+      }
+      if (isMountedRef.current) {
+        setIsProcessing(false);
+      }
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -348,28 +402,6 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
     await handleScanText(token);
     setManualToken("");
   };
-
-  // Strict cleanup on unmount so camera is never left active
-  React.useEffect(() => {
-    return () => {
-      if (scannerRef.current) {
-        if (scannerRef.current.isScanning) {
-          scannerRef.current
-            .stop()
-            .then(() => {
-              scannerRef.current?.clear();
-            })
-            .catch((err) => {
-              console.warn("Cleanup error on unmount:", err);
-            });
-        } else {
-          try {
-            scannerRef.current.clear();
-          } catch (_) {}
-        }
-      }
-    };
-  }, []);
 
   return (
     <div className="space-y-6">
@@ -400,6 +432,7 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
             <select
               value={selectedCameraId}
               onChange={(e) => handleCameraChange(e.target.value)}
+              disabled={isStarting}
               className="bg-card text-xs font-mono rounded-lg px-2.5 py-1.5 border border-border/70 focus:outline-none focus:border-primary max-w-[180px] sm:max-w-[220px] truncate"
               title="Select camera device"
             >
@@ -426,11 +459,20 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
               variant="cyber"
               size="sm"
               onClick={() => startScanning()}
-              disabled={isProcessing}
+              disabled={isStarting || isProcessing}
               className="gap-2 h-9 text-xs cyber-glow"
             >
-              <Camera className="h-4 w-4 text-primary" />
-              <span>Start Camera Scanner</span>
+              {isStarting ? (
+                <>
+                  <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                  <span>Starting Camera...</span>
+                </>
+              ) : (
+                <>
+                  <Camera className="h-4 w-4 text-primary" />
+                  <span>Start Camera Scanner</span>
+                </>
+              )}
             </Button>
           )}
         </div>
@@ -454,20 +496,33 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
         </div>
       )}
 
-      {/* Camera Viewport Canvas */}
+      {/* Camera Viewport Canvas: ISOLATED CONTAINER WITH ZERO REACT CHILDREN */}
       <div className="flex flex-col items-center justify-center">
-        <div
-          id="reader"
-          className="w-full max-w-md rounded-2xl overflow-hidden border border-border/80 bg-black shadow-2xl relative min-h-[300px] flex items-center justify-center text-center text-xs text-muted-foreground"
-        >
-          {!isScanning && (
-            <div className="p-8 space-y-3">
+        <div className="w-full max-w-md rounded-2xl overflow-hidden border border-border/80 bg-black shadow-2xl relative min-h-[300px] flex items-center justify-center">
+          {/* COMPLETELY EMPTY container for html5-qrcode. ZERO React children or JSX inside. */}
+          <div id="cybernexus-qr-reader" className="w-full h-full min-h-[300px]" />
+
+          {/* Sibling overlays managed exclusively by React without touching html5-qrcode's node */}
+          {!isScanning && !isStarting && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-8 space-y-3 text-center bg-black/85 pointer-events-none">
               <div className="h-14 w-14 rounded-2xl bg-card/60 border border-border/80 flex items-center justify-center mx-auto text-muted-foreground opacity-60">
                 <Camera className="h-7 w-7" />
               </div>
               <p className="font-medium text-foreground text-sm">Camera is inactive</p>
               <p className="text-[11px] text-muted-foreground/80 max-w-xs mx-auto">
                 Click &quot;Start Camera Scanner&quot; above, or use the image upload and manual token options below.
+              </p>
+            </div>
+          )}
+
+          {isStarting && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-8 space-y-3 text-center bg-black/90 z-10 pointer-events-none">
+              <Loader2 className="h-8 w-8 text-primary animate-spin" />
+              <p className="text-xs font-mono text-primary font-semibold">
+                Initializing Camera Stream...
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                Negotiating video permissions and resolution
               </p>
             </div>
           )}
@@ -480,6 +535,9 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
           </p>
         )}
       </div>
+
+      {/* Separate Hidden Container Dedicated Exclusively to File Scans (Zero Live Stream Impact) */}
+      <div id="cybernexus-qr-file-reader" className="hidden" aria-hidden="true" />
 
       {/* Dual Fallbacks Panel: Image File Scan & Manual Token Check-In */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
@@ -509,7 +567,7 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
             variant="outline"
             size="sm"
             onClick={() => fileInputRef.current?.click()}
-            disabled={isProcessing}
+            disabled={isProcessing || isStarting}
             className="w-full gap-2 text-xs border-primary/30 hover:bg-primary/10 hover:text-primary"
           >
             {isProcessing ? (
@@ -521,7 +579,7 @@ export function QRScanner({ onCheckInSuccess }: QRScannerProps) {
           </Button>
         </div>
 
-        {/* Fallback 2: Manual Token Check-In */}
+        {/* Fallback 2: Manual Ticket Token Check-In */}
         <div className="rounded-xl border border-border/70 bg-card/60 p-4 space-y-3">
           <div className="flex items-center gap-2">
             <KeyRound className="h-4 w-4 text-accent" />
