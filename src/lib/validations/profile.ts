@@ -6,8 +6,6 @@ export const ACADEMIC_LEVELS = [
   "L3",
   "M1",
   "M2",
-  "Cycle Ingénieur",
-  "Doctorat",
   "Autre",
 ] as const;
 
