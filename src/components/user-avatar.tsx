@@ -40,6 +40,8 @@ export function UserAvatar({
         src={src}
         alt={name || "User Avatar"}
         referrerPolicy="no-referrer"
+        crossOrigin="anonymous"
+        data-html-to-image-skip={src.includes("googleusercontent.com") ? "true" : undefined}
         onError={() => setImageError(true)}
         style={sizeStyle}
         className={cn(

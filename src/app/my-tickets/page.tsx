@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useSession, signIn } from "next-auth/react";
 import { toPng } from "html-to-image";
+import QRCode from "qrcode";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ import {
   AlertCircle,
   Clock,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 
 interface UserRegistration {
@@ -71,6 +73,7 @@ export default function MyTicketsPage() {
     studentId?: string | null;
   } | null>(null);
   const ticketRefs = React.useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const [downloadError, setDownloadError] = React.useState<string | null>(null);
 
   // Latin Name Certificate Confirmation Modal State
   const [latinNameModalOpen, setLatinNameModalOpen] = React.useState(false);
@@ -142,26 +145,199 @@ export default function MyTicketsPage() {
     }
   }, [session, authStatus, fetchRegistrations, fetchProfile]);
 
-  // 1. Client-side export of ticket pass using html-to-image
+  // 1. Helpers for crash-proof, CORS-safe PNG download
+  const triggerDownload = (dataUrl: string, filename: string) => {
+    const link = document.createElement("a");
+    link.download = filename;
+    link.href = dataUrl;
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      if (document.body.contains(link)) {
+        document.body.removeChild(link);
+      }
+    }, 150);
+  };
+
+  const filterNonExportable = (domNode: Node): boolean => {
+    if (domNode instanceof HTMLImageElement) {
+      // Filter cross-origin Google avatar images or nodes tagged to skip
+      if (
+        domNode.hasAttribute("data-html-to-image-skip") ||
+        domNode.src.startsWith("https://lh3.googleusercontent.com")
+      ) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // Guaranteed fallback: Offscreen canvas rendering with crisp QR Code and quiet zone
+  const generateCanvasFallback = async (reg: UserRegistration): Promise<string> => {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Could not initialize canvas 2D context");
+
+    const width = 800;
+    const height = 920;
+    canvas.width = width;
+    canvas.height = height;
+
+    // Solid CyberNexus Dark Background (#061322)
+    ctx.fillStyle = "#061322";
+    ctx.fillRect(0, 0, width, height);
+
+    // Cyan Outer Border (#22d3ee)
+    ctx.strokeStyle = "#22d3ee";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(28, 28, width - 56, height - 56);
+
+    // Inner Card Surface (#0b1e33)
+    ctx.fillStyle = "#0b1e33";
+    ctx.fillRect(40, 40, width - 80, height - 80);
+
+    // Header Badge: CYBERNEXUS UNIVERSITY TECH CLUB
+    ctx.fillStyle = "#22d3ee";
+    ctx.font = "bold 20px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("CYBERNEXUS UNIVERSITY TECH CLUB", width / 2, 95);
+
+    // Main Title: OFFICIAL DOOR PASS
+    ctx.fillStyle = "#f8fafc";
+    ctx.font = "bold 32px sans-serif";
+    ctx.fillText("OFFICIAL DOOR PASS", width / 2, 145);
+
+    // Workshop Title (truncated if excessively long)
+    ctx.fillStyle = "#22d3ee";
+    ctx.font = "bold 24px sans-serif";
+    const displayTitle =
+      reg.event.title.length > 42 ? `${reg.event.title.slice(0, 39)}...` : reg.event.title;
+    ctx.fillText(displayTitle, width / 2, 205);
+
+    // Workshop Details
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "17px sans-serif";
+    const formattedDate = new Date(reg.event.startAt).toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    ctx.fillText(`${reg.event.category}  |  ${formattedDate}`, width / 2, 245);
+    ctx.fillText(`Venue: ${reg.event.location}`, width / 2, 275);
+
+    // Attendee Name
+    ctx.fillStyle = "#f8fafc";
+    ctx.font = "bold 20px sans-serif";
+    const attendee = session?.user?.name || "Student Member";
+    ctx.fillText(`Attendee: ${attendee}`, width / 2, 325);
+
+    // Generate crisp QR code data URL using local qrcode library
+    const qrDataUrl = await QRCode.toDataURL(reg.ticketToken, {
+      width: 320,
+      margin: 1,
+      color: {
+        dark: "#000000",
+        light: "#ffffff",
+      },
+      errorCorrectionLevel: "M",
+    });
+
+    const qrImg = new Image();
+    await new Promise<void>((resolve, reject) => {
+      qrImg.onload = () => resolve();
+      qrImg.onerror = reject;
+      qrImg.src = qrDataUrl;
+    });
+
+    // Solid white quiet-zone backing box for 100% camera readability
+    const boxSize = 340;
+    const boxX = (width - boxSize) / 2;
+    const boxY = 360;
+
+    ctx.fillStyle = "#ffffff";
+    if (typeof (ctx as any).roundRect === "function") {
+      ctx.beginPath();
+      (ctx as any).roundRect(boxX, boxY, boxSize, boxSize, 16);
+      ctx.fill();
+    } else {
+      ctx.fillRect(boxX, boxY, boxSize, boxSize);
+    }
+
+    // Draw QR code inside white backing box
+    ctx.drawImage(qrImg, boxX + 10, boxY + 10, 320, 320);
+
+    // Pass Reference Token
+    ctx.fillStyle = "#22d3ee";
+    ctx.font = "bold 15px monospace";
+    ctx.fillText(`PASS REF: ${reg.ticketToken}`, width / 2, 755);
+
+    // Footer Instructions
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "14px sans-serif";
+    ctx.fillText(
+      "Present this digital pass at the venue entrance desk for camera check-in.",
+      width / 2,
+      795
+    );
+    ctx.fillText("Verified by CyberNexus University Club Registration Desk", width / 2, 825);
+
+    return canvas.toDataURL("image/png");
+  };
+
+  // Multi-tier, CORS-safe, guaranteed PNG export
   const handleSaveAsPng = async (reg: UserRegistration) => {
     const node = ticketRefs.current[reg.id];
-    if (!node) return;
+    const safeTitle = reg.event.title.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase();
+    const filename = `cybernexus-pass-${safeTitle}.png`;
+
+    setSavingPngId(reg.id);
+    setDownloadError(null);
+
+    const baseOptions = {
+      pixelRatio: 2,
+      cacheBust: true,
+      backgroundColor: "#061322",
+      includeQueryParams: true,
+      filter: filterNonExportable,
+    };
 
     try {
-      setSavingPngId(reg.id);
-      const dataUrl = await toPng(node, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: "#0b1e33",
-      });
+      let dataUrl: string | null = null;
 
-      const link = document.createElement("a");
-      const safeTitle = reg.event.title.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase();
-      link.download = `cybernexus-pass-${safeTitle}.png`;
-      link.href = dataUrl;
-      link.click();
-    } catch (err) {
-      console.error("Failed to export ticket as PNG:", err);
+      if (node) {
+        try {
+          // Attempt 1: Standard toPng with dark background & CORS filters
+          dataUrl = await toPng(node, baseOptions);
+        } catch (firstErr) {
+          console.warn(
+            "Standard toPng failed (likely font cssRules or CORS), retrying with skipFonts: true",
+            firstErr
+          );
+          // Attempt 2: Retry with skipFonts: true to bypass cross-origin CSS font rule blocks
+          try {
+            dataUrl = await toPng(node, { ...baseOptions, skipFonts: true });
+          } catch (secondErr) {
+            console.warn(
+              "toPng with skipFonts failed, falling back to guaranteed canvas render",
+              secondErr
+            );
+          }
+        }
+      }
+
+      // Attempt 3: Guaranteed Canvas Fallback
+      if (!dataUrl) {
+        dataUrl = await generateCanvasFallback(reg);
+      }
+
+      triggerDownload(dataUrl, filename);
+    } catch (err: any) {
+      console.error("All PNG export strategies failed:", err);
+      setDownloadError(
+        "Could not generate PNG pass. Please take a quick screenshot of your screen or download your official certificate after check-in."
+      );
     } finally {
       setSavingPngId(null);
     }
@@ -266,6 +442,23 @@ export default function MyTicketsPage() {
           </Button>
         </div>
       </div>
+
+      {/* Export / Download Diagnostic Error Banner */}
+      {downloadError && (
+        <div className="rounded-xl border border-destructive/50 bg-destructive/15 p-4 text-xs text-destructive flex items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{downloadError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDownloadError(null)}
+            className="text-[11px] underline font-mono hover:text-foreground shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {activeRegistrations.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border/70 p-12 text-center space-y-4 bg-card/30">
@@ -407,7 +600,7 @@ export default function MyTicketsPage() {
                 {/* Footer Action Buttons */}
                 <div className="border-t border-border/60 pt-4 flex flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    {/* Button 1: Save as PNG */}
+                    {/* Button 1: Save as PNG (Multi-tier CORS-safe & Canvas Fallback) */}
                     <Button
                       variant="outline"
                       size="sm"
@@ -415,7 +608,11 @@ export default function MyTicketsPage() {
                       disabled={savingPngId === reg.id}
                       className="text-xs gap-1.5"
                     >
-                      <Download className="h-3.5 w-3.5 text-primary" />
+                      {savingPngId === reg.id ? (
+                        <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
+                      ) : (
+                        <Download className="h-3.5 w-3.5 text-primary" />
+                      )}
                       <span>{savingPngId === reg.id ? "Exporting..." : "Save as PNG"}</span>
                     </Button>
 
