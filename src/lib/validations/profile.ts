@@ -15,9 +15,6 @@ export const SPECIALTY_SUGGESTIONS = [
   "IA & Data Science",
   "Cybersécurité & Réseaux",
   "Systèmes d'Information",
-  "Génie Électrique",
-  "Mathématiques & Informatique",
-  "Télécommunications",
 ] as const;
 
 export const profileSchema = z.object({
